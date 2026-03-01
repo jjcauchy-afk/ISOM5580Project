@@ -3,8 +3,8 @@ import pandas as pd
 import os
 import random
 from io import BytesIO
-import PyPDF2
-from docx import Document
+import pypdf
+import docx2txt
 from sentence_transformers import SentenceTransformer, util
 from openai import OpenAI
 
@@ -112,7 +112,6 @@ def load_jobsdb():
     else:
         df = pd.read_csv(csv_path)
     
-    # Always prepend 21 fresh samples at the beginning (as per requirement)
     samples_df = generate_sample_jobs(21)
     df = pd.concat([samples_df, df], ignore_index=True)
     df = df.drop_duplicates(subset=["title", "company", "link"]).reset_index(drop=True)
@@ -129,7 +128,6 @@ def load_linkedin():
     else:
         df = pd.read_csv(csv_path)
     
-    # Always prepend 21 fresh samples
     samples_df = generate_sample_mentors(21)
     df = pd.concat([samples_df, df], ignore_index=True)
     df = df.drop_duplicates(subset=["name", "job_title"]).reset_index(drop=True)
@@ -137,31 +135,32 @@ def load_linkedin():
 
 
 # =============================================
-# CV PARSING
+# CV PARSING → pypdf + docx2txt (YOUR REQUEST)
 # =============================================
 def parse_cv(uploaded_file):
     if uploaded_file is None:
         return ""
+    
     file_ext = uploaded_file.name.split(".")[-1].lower()
     bytes_data = uploaded_file.getvalue()
     
     text = ""
-    if file_ext == "pdf":
-        try:
-            pdf_reader = PyPDF2.PdfReader(BytesIO(bytes_data))
+    try:
+        if file_ext == "pdf":
+            pdf_reader = pypdf.PdfReader(BytesIO(bytes_data))
             for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-        except Exception as e:
-            st.error(f"PDF parsing error: {e}")
-    elif file_ext == "docx":
-        try:
-            doc = Document(BytesIO(bytes_data))
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        except Exception as e:
-            st.error(f"DOCX parsing error: {e}")
-    else:
-        st.error("Only PDF and DOCX supported")
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        elif file_ext == "docx":
+            text = docx2txt.process(BytesIO(bytes_data))
+        else:
+            st.error("Only PDF and DOCX files are supported.")
+            return ""
+    except Exception as e:
+        st.error(f"Error parsing CV: {str(e)}")
+        return ""
+    
     return text.strip()
 
 
@@ -173,9 +172,8 @@ def analyze_cv(cv_text, api_key):
         return "Enter your OpenAI key to enable AI analysis.", "Enter your OpenAI key to enable suggestions."
     
     client = OpenAI(api_key=api_key)
-    truncated = cv_text[:6000]  # safety
+    truncated = cv_text[:6000]
     
-    # Summary
     summary_prompt = f"""Summarize this CV in 4-6 professional sentences. Highlight key experience, skills, and career goals.
 CV:
 {truncated}"""
@@ -188,7 +186,6 @@ CV:
     )
     summary = summary_resp.choices[0].message.content.strip()
     
-    # Suggestions
     sugg_prompt = f"""Give 5 concrete, actionable suggestions to improve this CV for tech/job applications (bullet points).
 Focus on keywords, achievements, structure.
 CV:
@@ -227,12 +224,12 @@ Tone: respectful, concise, genuine. End with a clear call-to-action."""
             temperature=0.8
         )
         return resp.choices[0].message.content.strip()
-    except Exception as e:
+    except Exception:
         return f"Hi {mentor_row['name']}, I'd love to connect for a quick coffee chat about your career path. Available next week?"
 
 
 # =============================================
-# EMBEDDING MODEL (cached)
+# EMBEDDING MODEL
 # =============================================
 @st.cache_resource
 def get_embedding_model():
@@ -256,7 +253,6 @@ if uploaded_file:
     if cv_text:
         st.success(f"✅ CV parsed successfully ({len(cv_text.split())} words)")
         
-        # CV Analysis (LLM)
         if openai_key:
             with st.spinner("Analyzing CV with AI..."):
                 cv_summary, suggestions = analyze_cv(cv_text, openai_key)
@@ -276,7 +272,6 @@ if uploaded_file:
         # =============================================
         model = get_embedding_model()
         
-        # Jobs matching
         df_jobs = load_jobsdb()
         df_jobs["full_text"] = df_jobs.apply(
             lambda row: f"{row['title']} at {row['company']} in {row['location']}. {row['summary']}", axis=1
@@ -287,7 +282,6 @@ if uploaded_file:
         df_jobs["match_score"] = (job_scores * 100).round(1)
         df_jobs = df_jobs.sort_values("match_score", ascending=False).reset_index(drop=True)
         
-        # Mentors matching
         df_mentors = load_linkedin()
         df_mentors["full_text"] = df_mentors.apply(
             lambda row: f"{row['name']} {row['job_title']}. {row['summary']}", axis=1
@@ -303,7 +297,6 @@ if uploaded_file:
         st.markdown("---")
         left_col, right_col = st.columns([1, 1], gap="large")
 
-        # ----------------- JOBS LEFT -----------------
         with left_col:
             st.subheader("🔍 Job Matches on JobsDB")
             st.caption("Top matches based on semantic similarity")
@@ -325,7 +318,6 @@ if uploaded_file:
                     st.write(f"**Match Score: {job['match_score']}%**")
                     st.link_button("🔗 View on JobsDB", job['link'], use_container_width=True)
             
-            # Pagination
             pcol1, pcol2, pcol3 = st.columns([1, 2, 1])
             with pcol1:
                 if st.button("← Previous", key="jobs_prev", disabled=st.session_state.job_page == 0):
@@ -335,9 +327,8 @@ if uploaded_file:
                 if st.button("Next →", key="jobs_next", disabled=end_idx >= total_jobs):
                     st.session_state.job_page += 1
                     st.rerun()
-            st.caption(f"Page {st.session_state.job_page + 1} of {(total_jobs - 1) // jobs_per_page + 1} • Showing {len(page_jobs)} jobs")
+            st.caption(f"Page {st.session_state.job_page + 1} of {(total_jobs - 1) // jobs_per_page + 1}")
 
-        # ----------------- MENTORS RIGHT -----------------
         with right_col:
             st.subheader("👥 Career Path Mentors on LinkedIn")
             st.caption("People who have walked your path — reach out!")
@@ -380,7 +371,6 @@ if uploaded_file:
                         if st.session_state.show_greeting.get(mentor_id, False):
                             st.info(st.session_state.greetings.get(mentor_id, "Message ready"))
             
-            # Mentor pagination
             mpcol1, mpcol2, mpcol3 = st.columns([1, 2, 1])
             with mpcol1:
                 if st.button("← Previous", key="mentors_prev", disabled=st.session_state.mentor_page == 0):
@@ -395,6 +385,5 @@ if uploaded_file:
 else:
     st.info("👆 Upload your CV to see personalized job matches and mentor suggestions")
 
-# Footer
 st.markdown("---")
-st.caption("CareerBridge AI • Built with Streamlit • Semantic search powered by sentence-transformers • LLM by OpenAI")
+st.caption("CareerBridge AI • Built with Streamlit • pypdf + docx2txt for CV parsing • Semantic search powered by sentence-transformers")
