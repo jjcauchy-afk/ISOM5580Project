@@ -2,3 +2,5 @@ docx2txt
 scikit-learn
 openai
 pypdf
+torch
+sentence-transformers
