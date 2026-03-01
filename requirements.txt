@@ -4,3 +4,5 @@ openai
 pypdf
 torch
 sentence-transformers
+streamlit
+pandas
