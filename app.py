@@ -1,129 +1,101 @@
 import streamlit as st
 import pandas as pd
 import os
-import requests
+import docx2txt
 from pypdf import PdfReader
-from docx import Document
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import openai
+from sentence_transformers import SentenceTransformer, util
+import torch
 
-# --- Configuration & API Keys ---
-# Set your OpenAI API key or use Streamlit Secrets for production
-OPENAI_API_KEY = "your_openai_api_key"
-RAPID_API_KEY = "your_rapidapi_key"
+# --- 1. Configuration & Setup ---
+st.set_page_config(page_title="CareerBridge AI", layout="wide")
 
-# --- Data Preparation (Requirements 2 & 3) ---
-def get_data(filename, api_url, api_host):
-    if os.path.exists(filename):
-        return pd.read_csv(filename)
-    else:
-        # Placeholder for RapidAPI call logic
-        # headers = {"X-RapidAPI-Key": RAPID_API_KEY, "X-RapidAPI-Host": api_host}
-        # response = requests.get(api_url, headers=headers)
-        # data = response.json()
-        
-        # Creating sample data if API is not configured
-        if "jobsdb" in filename:
-            df = pd.DataFrame([
-                {"title": f"Software Engineer {i}", "company": "Tech Corp", "location": "Hong Kong", "summary": "Full stack role...", "link": "https://hk.jobsdb.com", "text": "Python React SQL"} for i in range(50)
-            ])
-        else:
-            df = pd.DataFrame([
-                {"name": f"Mentor {i}", "title": "Senior Dev", "summary": "10 years exp...", "link": "https://linkedin.com", "text": "Cloud AI Mentorship"} for i in range(50)
-            ])
-        df.to_csv(filename, index=False)
-        return df
-
-# --- Utility Functions ---
 def extract_text(file):
     if file.type == "application/pdf":
-        reader = PdfReader(file)
-        return " ".join([page.extract_text() for page in reader.pages])
-    elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = Document(file)
-        return " ".join([p.text for p in doc.paragraphs])
-    return ""
+        return " ".join([page.extract_text() for page in PdfReader(file).pages])
+    return docx2txt.process(file)
 
-def call_llm(prompt):
-    # Simplified LLM call using OpenAI
-    try:
-        # client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        # response = client.chat.completions.create(...)
-        return f"LLM Summary/Suggestion based on prompt: {prompt[:50]}..."
-    except:
-        return "LLM service unavailable. Check API key."
+# --- 2 & 3. Data Handling (JobsDB & LinkedIn) ---
+def get_mock_data(type="jobs"):
+    if type == "jobs":
+        return [{"title": f"Software Engineer {i}", "company": "Tech Corp", "location": "Remote", "summary": "Full stack role", "link": "https://jobsdb.com", "text": "Python React AWS"} for i in range(30)]
+    return [{"name": f"Mentor {i}", "title": "Senior Dev", "summary": "Ex-Google engineer", "link": "https://linkedin.com", "text": "Mentorship scaling systems"} for i in range(30)]
 
-def semantic_match(query_text, dataset_df):
-    vectorizer = TfidfVectorizer()
-    all_texts = [query_text] + dataset_df['text'].tolist()
-    tfidf_matrix = vectorizer.fit_transform(all_texts)
-    scores = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:]).flatten()
-    dataset_df['match_score'] = (scores * 100).round(2)
-    return dataset_df.sort_values(by='match_score', ascending=False)
+def load_data(filename, data_type):
+    if not os.path.exists(filename):
+        # Placeholder for RapidAPI logic; using mock data for now
+        df = pd.DataFrame(get_mock_data(data_type))
+        df.to_csv(filename, index=False)
+    return pd.read_csv(filename)
 
-def paginate(df, page_size=10):
-    total_pages = (len(df) // page_size) + (1 if len(df) % page_size > 0 else 0)
-    page_num = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
-    start_idx = (page_num - 1) * page_size
-    return df.iloc[start_idx : start_idx + page_size]
+jobs_df = load_data("jobsdb.csv", "jobs")
+linkedin_df = load_data("linkedin.csv", "mentors")
 
-# --- Page Definitions (Requirements 4, 5, 6) ---
-def cv_upload_page():
-    st.title("📄 CV Upload & Analysis")
-    uploaded_file = st.file_uploader("Upload CV (PDF or DOCX)", type=["pdf", "docx"])
+# --- 4. LLM Functions (Placeholders) ---
+def analyze_cv(text):
+    # Integration point for OpenAI/Anthropic
+    return "Your profile shows strong backend expertise.", "Add more quantifiable achievements in your latest role."
+
+# --- 5 & 6. Semantic Search Logic ---
+@st.cache_resource
+def get_model():
+    return SentenceTransformer('all-MiniLM-L6-v2')
+
+def get_matches(query, target_df, text_col):
+    model = get_model()
+    query_emb = model.encode(query, convert_to_tensor=True)
+    target_embs = model.encode(target_df[text_col].tolist(), convert_to_tensor=True)
+    scores = util.cos_sim(query_emb, target_embs)[0]
+    target_df['score'] = scores.tolist()
+    return target_df.sort_values(by='score', ascending=False)
+
+# --- 7. Layout ---
+st.title("🚀 CareerBridge AI")
+st.subheader("Bridge the gap to your dream career")
+
+# CV Upload Section
+st.info("Upload your resume and let AI find your perfect job matches on JobsDB and connect you with mentors who've walked your path.")
+uploaded_file = st.file_uploader("Choose a CV (PDF or DOCX)", type=["pdf", "docx"])
+
+if uploaded_file:
+    cv_text = extract_text(uploaded_file)
+    analysis, suggestions = analyze_cv(cv_text)
     
-    if uploaded_file:
-        cv_text = extract_text(uploaded_file)
-        st.session_state['cv_text'] = cv_text
-        st.success("CV uploaded successfully!")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### Analysis")
+        st.write(analysis)
+    with col2:
+        st.markdown("### Suggestions to improve CV")
+        st.write(suggestions)
+
+    st.divider()
+
+    # Lower Section: Matching
+    left_col, right_col = st.columns(2)
+
+    with left_col:
+        st.header("🎯 Matched Jobs")
+        matched_jobs = get_matches(cv_text, jobs_df, 'text')
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Summary")
-            st.write(call_llm(f"Summarize this CV: {cv_text[:1000]}"))
-        with col2:
-            st.subheader("Improvement Suggestions")
-            st.write(call_llm(f"Suggest improvements for: {cv_text[:1000]}"))
+        # Simple Pagination
+        page_j = st.number_input("Jobs Page", min_value=1, value=1)
+        start_j = (page_j - 1) * 10
+        for _, job in matched_jobs.iloc[start_j : start_j+10].iterrows():
+            with st.expander(f"{job['title']} - {job['company']} (Score: {job['score']:.2f})"):
+                st.write(f"**Location:** {job['location']}")
+                st.write(job['summary'])
+                st.link_button("View on JobsDB", job['link'])
 
-def job_match_page():
-    st.title("💼 JobsDB Matching")
-    if 'cv_text' not in st.session_state:
-        st.warning("Please upload a CV first.")
-        return
-    
-    jobs_df = get_data("jobsdb.csv", "API_URL", "jdb.p.rapidapi.com")
-    matched_jobs = semantic_match(st.session_state['cv_text'], jobs_df)
-    
-    paged_jobs = paginate(matched_jobs)
-    for _, job in paged_jobs.iterrows():
-        with st.expander(f"{job['title']} @ {job['company']} (Score: {job['match_score']}%)"):
-            st.write(f"**Location:** {job['location']}")
-            st.write(f"**Summary:** {job['summary']}")
-            st.link_button("View on JobsDB", job['link'])
-
-def mentor_match_page():
-    st.title("🤝 Career Path Mentors")
-    if 'cv_text' not in st.session_state:
-        st.warning("Please upload a CV first.")
-        return
-    
-    mentor_df = get_data("linkedin.csv", "API_URL", "li.p.rapidapi.com")
-    matched_mentors = semantic_match(st.session_state['cv_text'], mentor_df)
-    
-    paged_mentors = paginate(matched_mentors)
-    for _, mentor in paged_mentors.iterrows():
-        st.markdown(f"### {mentor['name']} - {mentor['title']}")
-        st.write(mentor['summary'])
-        st.link_button("LinkedIn Profile", mentor['link'])
+    with right_col:
+        st.header("🤝 Career Path Mentors")
+        matched_mentors = get_matches(cv_text, linkedin_df, 'text')
         
-        if st.button(f"Coffee chat Invite", key=f"btn_{mentor['name']}"):
-            st.info(f"Greeting: Hi {mentor['name']}, I saw your profile and would love to chat about your career path!")
-
-# --- Main Navigation Setup ---
-pg = st.navigation([
-    st.Page(cv_upload_page, title="CV Upload", icon="📤"),
-    st.Page(job_match_page, title="Job Matching", icon="🔍"),
-    st.Page(mentor_match_page, title="Mentors", icon="👥")
-])
-pg.run()
+        page_m = st.number_input("Mentors Page", min_value=1, value=1)
+        start_m = (page_m - 1) * 10
+        for _, mentor in matched_mentors.iloc[start_m : start_m+10].iterrows():
+            with st.container(border=True):
+                st.write(f"**{mentor['name']}** - {mentor['title']}")
+                st.write(mentor['summary'])
+                st.link_button("LinkedIn Profile", mentor['link'])
+                if st.button(f"Coffee chat Invite", key=f"btn_{mentor['name']}"):
+                    st.code(f"Hi {mentor['name']}, I saw your profile and love your work at {mentor['title']}. Would love to grab a virtual coffee!")
