@@ -6,7 +6,23 @@ from io import BytesIO
 import pypdf
 import docx2txt
 from sentence_transformers import SentenceTransformer, util
-from openai import OpenAI
+from openai import AzureOpenAI
+
+# =============================================
+# HARD-CODED AZURE OPENAI CONFIG (YOUR REQUEST)
+# =============================================
+# WARNING: Hardcoding API keys is for development / localhost only.
+# Never push this file to public GitHub with a real key!
+
+AZURE_OPENAI_API_KEY = "d61f68e18b894a36a48063cd1fe6a457"          # ← REPLACE WITH YOUR REAL AZURE KEY HERE
+AZURE_ENDPOINT = "https://hkust.azure-api.net"
+AZURE_API_VERSION = "2025-02-01-preview"
+AZURE_MODEL = "gpt-4o"
+
+# Safety check
+if AZURE_OPENAI_API_KEY == "<my_key>" or not AZURE_OPENAI_API_KEY:
+    st.error("⚠️ **Please replace `<my_key>` with your real Azure OpenAI API key** in the code (line 18)")
+    st.stop()
 
 # =============================================
 # SETUP & CONFIG
@@ -14,8 +30,7 @@ from openai import OpenAI
 st.set_page_config(
     page_title="CareerBridge AI",
     page_icon="🌉",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 st.title("🌉 CareerBridge AI")
@@ -24,16 +39,7 @@ st.markdown("""
 **Upload your resume** → AI instantly finds perfect **JobsDB** matches + **LinkedIn mentors** who have walked your exact path.
 """)
 
-# Sidebar for API keys
-with st.sidebar:
-    st.header("🔑 API Settings")
-    openai_key = st.text_input(
-        "OpenAI API Key",
-        type="password",
-        value=os.getenv("OPENAI_API_KEY", ""),
-        help="Required for CV analysis & personalized mentor greetings"
-    )
-    st.caption("Get a free key at [platform.openai.com](https://platform.openai.com)")
+st.success("✅ Azure OpenAI key is hard-coded and ready")
 
 # =============================================
 # SAMPLE DATA GENERATION (21 records)
@@ -103,7 +109,7 @@ def load_linkedin():
     return df
 
 # =============================================
-# CV PARSING (pypdf + docx2txt)
+# CV PARSING
 # =============================================
 def parse_cv(uploaded_file):
     if uploaded_file is None:
@@ -129,27 +135,34 @@ def parse_cv(uploaded_file):
     return text.strip()
 
 # =============================================
-# LLM HELPERS
+# LLM HELPERS — Using your exact AzureOpenAI initialization (hard-coded)
 # =============================================
-def analyze_cv(cv_text, api_key):
-    if not api_key or not cv_text:
-        return "Enter your OpenAI key to enable AI analysis.", "Enter your OpenAI key to enable suggestions."
-    client = OpenAI(api_key=api_key)
+def analyze_cv(cv_text):
+    client = AzureOpenAI(
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_API_VERSION,
+        azure_endpoint=AZURE_ENDPOINT
+    )
     truncated = cv_text[:6000]
     summary = client.chat.completions.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"Summarize this CV in 4-6 professional sentences. Highlight key experience, skills, and career goals.\nCV:\n{truncated}"}],
+        model=AZURE_MODEL,
+        messages=[{"role": "user", "content": f"Summarize this CV in 4-6 professional sentences. Highlight key experience, skills, and career goals.\nCV:\n{truncated}"}],
         max_tokens=300, temperature=0.7
     ).choices[0].message.content.strip()
+    
     suggestions = client.chat.completions.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"Give 5 concrete, actionable suggestions to improve this CV for tech/job applications (bullet points).\nFocus on keywords, achievements, structure.\nCV:\n{truncated}"}],
+        model=AZURE_MODEL,
+        messages=[{"role": "user", "content": f"Give 5 concrete, actionable suggestions to improve this CV for tech/job applications (bullet points).\nFocus on keywords, achievements, structure.\nCV:\n{truncated}"}],
         max_tokens=400, temperature=0.7
     ).choices[0].message.content.strip()
     return summary, suggestions
 
-def generate_greeting(mentor_row, cv_summary, api_key):
-    if not api_key:
-        return f"Hi {mentor_row['name']},\n\nI came across your impressive profile while looking for mentors in {mentor_row['job_title'].split('@')[0]}. I'd love to learn from your journey over a quick 15-minute virtual coffee chat. Would you be open to it?\n\nBest regards,\n[Your Name]"
-    client = OpenAI(api_key=api_key)
+def generate_greeting(mentor_row, cv_summary):
+    client = AzureOpenAI(
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_API_VERSION,
+        azure_endpoint=AZURE_ENDPOINT
+    )
     prompt = f"""Write a short, warm, professional first-message (max 5 sentences) to invite {mentor_row['name']} for a 15-min virtual coffee chat.
 
 Mentor: {mentor_row['name']}, {mentor_row['job_title']}
@@ -158,10 +171,15 @@ Mentor summary: {mentor_row['summary']}
 My background summary: {cv_summary if cv_summary else 'Aspiring professional in tech with strong interest in career growth.'}
 
 Tone: respectful, concise, genuine. End with a clear call-to-action."""
+    
     try:
-        return client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], max_tokens=220, temperature=0.8).choices[0].message.content.strip()
+        return client.chat.completions.create(
+            model=AZURE_MODEL,
+            messages=[{"role": "system", "content": "You are the candidate to seek jobs and advices from mentors."},{"role": "user", "content": prompt}],
+            max_tokens=220, temperature=0.8
+        ).choices[0].message.content.strip()
     except Exception:
-        return f"Hi {mentor_row['name']}, I'd love to connect for a quick coffee chat about your career path. Available next week?"
+        return f"Hi {mentor_row['name']}, I'd love to connect for a quick coffee chat about my career path. Available next week?"
 
 # =============================================
 # EMBEDDING MODEL
@@ -183,21 +201,19 @@ if uploaded_file:
     if cv_text:
         st.success(f"✅ CV parsed successfully ({len(cv_text.split())} words)")
         
-        if openai_key:
-            with st.spinner("Analyzing CV with AI..."):
-                cv_summary, suggestions = analyze_cv(cv_text, openai_key)
-            col_ana1, col_ana2 = st.columns(2)
-            with col_ana1:
-                st.subheader("📊 Analysis")
-                st.markdown(cv_summary)
-            with col_ana2:
-                st.subheader("💡 Suggestions to improve CV")
-                st.markdown(suggestions)
-        else:
-            st.warning("🔑 Enter OpenAI API key in sidebar for AI-powered CV analysis & mentor greetings")
+        with st.spinner("Analyzing CV with Azure OpenAI..."):
+            cv_summary, suggestions = analyze_cv(cv_text)
+        
+        col_ana1, col_ana2 = st.columns(2)
+        with col_ana1:
+            st.subheader("📊 Analysis")
+            st.markdown(cv_summary)
+        with col_ana2:
+            st.subheader("💡 Suggestions to improve CV")
+            st.markdown(suggestions)
 
         # =============================================
-        # SEMANTIC MATCHING — 2 decimal places
+        # SEMANTIC MATCHING
         # =============================================
         model = get_embedding_model()
         
@@ -214,9 +230,6 @@ if uploaded_file:
         df_mentors["match_score"] = (util.cos_sim(cv_embedding, mentor_embeddings)[0].cpu().numpy() * 100).round(2)
         df_mentors = df_mentors.sort_values("match_score", ascending=False).reset_index(drop=True)
 
-        # =============================================
-        # LAYOUT: JOBS LEFT | MENTORS RIGHT
-        # =============================================
         st.markdown("---")
         left_col, right_col = st.columns([1, 1], gap="large")
 
@@ -248,11 +261,9 @@ if uploaded_file:
                     st.rerun()
             st.caption(f"Page {st.session_state.job_page + 1} of {(total_jobs - 1) // jobs_per_page + 1}")
 
-        # ==================== MENTORS RIGHT (Button + Message in SAME COLUMN) ====================
         with right_col:
             st.subheader("👥 Career Path Mentors on LinkedIn")
             st.caption("People who have walked your path — reach out!")
-            
             mentors_per_page = 10
             if "mentor_page" not in st.session_state:
                 st.session_state.mentor_page = 0
@@ -268,7 +279,6 @@ if uploaded_file:
             
             for idx, mentor in page_mentors.iterrows():
                 mentor_id = f"mentor_{start_idx_m + idx}"
-                
                 with st.container(border=True):
                     st.write(f"**{mentor['name']}**")
                     st.write(f"*{mentor['job_title']}*")
@@ -276,19 +286,16 @@ if uploaded_file:
                     st.write(f"**Match Score: {mentor['match_score']:.2f}%**")
                     st.link_button("🔗 View LinkedIn", mentor['link'], use_container_width=True)
                     
-                    # Coffee chat Invite button + greeting in SAME column
                     btn_label = "☕ Coffee chat Invite" if not st.session_state.show_greeting.get(mentor_id, False) else "Hide Message"
                     if st.button(btn_label, key=f"invite_{mentor_id}", use_container_width=True):
                         st.session_state.show_greeting[mentor_id] = not st.session_state.show_greeting.get(mentor_id, False)
                         if st.session_state.show_greeting[mentor_id] and mentor_id not in st.session_state.greetings:
-                            with st.spinner("Crafting personalized message..."):
-                                greeting = generate_greeting(mentor, cv_summary, openai_key)
+                            with st.spinner("Crafting personalized message with Azure OpenAI..."):
+                                greeting = generate_greeting(mentor, cv_summary)
                                 st.session_state.greetings[mentor_id] = greeting
-                    
                     if st.session_state.show_greeting.get(mentor_id, False):
                         st.info(st.session_state.greetings.get(mentor_id, "Message ready"))
             
-            # Mentor pagination
             mpcol1, _, mpcol3 = st.columns([1, 2, 1])
             with mpcol1:
                 if st.button("← Previous", key="mentors_prev", disabled=st.session_state.mentor_page == 0):
@@ -304,4 +311,4 @@ else:
     st.info("👆 Upload your CV to see personalized job matches and mentor suggestions")
 
 st.markdown("---")
-st.caption("CareerBridge AI • Built with Streamlit • pypdf + docx2txt • Match scores to 2 d.p. • Coffee chat button in same column")
+st.caption("CareerBridge AI • Azure OpenAI key hard-coded • pypdf + docx2txt • Match scores to 2 d.p.")
