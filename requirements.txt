@@ -1,2 +1,3 @@
 python-docx
 scikit-learn
+openai
