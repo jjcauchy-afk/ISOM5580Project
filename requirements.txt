@@ -3,6 +3,6 @@ scikit-learn
 openai
 pypdf
 torch
-sentence-transformers
 streamlit
 pandas
+sentence-transformers
