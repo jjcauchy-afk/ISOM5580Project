@@ -24,6 +24,9 @@ SEMANTIC_MODEL          = "all-MiniLM-L6-v2"
 MAX_JOBS                = 10
 MAX_PROFILES            = 10
 
+RANDOM_JOBS             = 100
+RANDOM_PROFILES         = 100
+
 # ────────────────────────────────────────────────
 #  Initialize clients & models (cached)
 # ────────────────────────────────────────────────
@@ -195,7 +198,6 @@ def match_jobs(cv_summary: str, job_interest: str, df_jobs: pd.DataFrame) -> pd.
     df["summary"] = ""
     for i, row in df.iterrows():
 
-        # replace job description with a short summary
         prompt_job_summary = (
             f"Summarize below job in max 30 words.\n\n"
             f"Job: {row["description"][:500]}\n"
@@ -241,11 +243,19 @@ def match_profiles(cv_summary: str, job_interest: str, df_profiles: pd.DataFrame
     df["greeting"] = ""
 
     for i, row in df.head(MAX_PROFILES).iterrows():
+        # summary
+        prompt_profile_summary = (
+            f"Summarize below profile in max 30 words.\n\n"
+            f"Job: {row["summary"][:500]}\n"
+        )
+        job_summary = generate_text(prompt_job_summary, temperature=0.7)
+        df.at[i, "summary"] = prompt_profile_summary
+
         # Reason
         prompt_reason = (
             f"Why this mentor can help me in my career path?\n"
             f"Mentor headline: {row['headline']}\n"
-            f"Mentor summary: {row.get('summary','')[:500]}\n"
+            f"Mentor summary: {prompt_profile_summary}\n"
             f"My CV summary: {cv_summary}\n"
             f"My job interests: {job_interest}"
         )
@@ -330,8 +340,8 @@ def main():
 
     # ── Load datasets ────────────────────────────────
     with st.spinner("Loading LinkedIn datasets ..."):
-        df_jobs     = load_jobs()
-        df_profiles = load_profiles()
+        df_jobs     = load_jobs().sample(n=RANDOM_JOBS, random_state=1)
+        df_profiles = load_profiles().sample(n=RANDOM_PROFILES, random_state=1)
 
     if df_jobs.empty and df_profiles.empty:
         st.error("No job or profile data available. Cannot perform matching.")
