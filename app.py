@@ -128,6 +128,7 @@ def load_jobs() -> pd.DataFrame:
         return pd.DataFrame(columns=["id","company","title","location","description","link"])
     try:
         df = pd.read_csv(path)
+        df['description'] = df['description'].fillna('')
         required = {"id","company","title","location","description","link"}
         if not required.issubset(df.columns):
             st.warning("jobs.csv is missing some expected columns")
