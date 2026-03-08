@@ -267,7 +267,7 @@ def match_profiles(cv_summary: str, job_interest: str, df_profiles: pd.DataFrame
             f"to invite this mentor for a 15-min virtual coffee chat.\n"
             f"Mentor's name: {row['name']}\n"
             f"Mentor's job: {row['headline']}\n"
-            f"Mentor's summary: {row.get('summary','')}\n\n"
+            f"Mentor's summary: {profile_summary}\n\n"
             f"My CV summary: {cv_summary}\n"
             f"My job interests: {job_interest}\n\n"
             "Tone: respectful, concise, genuine. End with a clear call-to-action."
