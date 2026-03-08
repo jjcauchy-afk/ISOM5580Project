@@ -248,14 +248,14 @@ def match_profiles(cv_summary: str, job_interest: str, df_profiles: pd.DataFrame
             f"Summarize below profile in max 30 words.\n\n"
             f"Job: {row["summary"][:500]}\n"
         )
-        job_summary = generate_text(prompt_job_summary, temperature=0.7)
-        df.at[i, "summary"] = prompt_profile_summary
+        profile_summary = generate_text(prompt_job_summary, temperature=0.7)
+        df.at[i, "summary"] = profile_summary
 
         # Reason
         prompt_reason = (
             f"Why this mentor can help me in my career path?\n"
             f"Mentor headline: {row['headline']}\n"
-            f"Mentor summary: {prompt_profile_summary}\n"
+            f"Mentor summary: {profile_summary}\n"
             f"My CV summary: {cv_summary}\n"
             f"My job interests: {job_interest}"
         )
