@@ -293,24 +293,25 @@ def main():
     st.divider()
 
     # ── Inputs ───────────────────────────────────────
-    col_left, col_right = st.columns([5, 5])
+#    col_left, col_right = st.columns([5, 5])
 
-    with col_left:
-        st.subheader("Step 1: 📄 Upload your CV")
-        uploaded_file = st.file_uploader(
-            "PDF or DOCX only",
-            type=["pdf", "docx"],
-            help="Upload your resume / CV"
-        )
+    #with col_left:
+    st.subheader("Step 1: 📄 Upload your CV")
+    uploaded_file = st.file_uploader(
+        "PDF or DOCX only",
+        type=["pdf", "docx"],
+        help="Upload your resume / CV"
+    )
 
-    with col_right:
-        st.subheader("Step 2: 🧭 Your job Interest (optional)")
-        job_interest = st.text_area(
-            label="Describe the roles, industries, technologies or locations you're interested in",
-            height=140,
-            placeholder="Example:\n• AI / Machine Learning Engineer\n• Remote or Hong Kong\n• Python, PyTorch, LLM experience"
-        ).strip()
-
+#    with col_right:
+#        st.subheader("Step 2: 🧭 Your job Interest (optional)")
+#        job_interest = st.text_area(
+#            label="Describe the roles, industries, technologies or locations you're interested in",
+#            height=140,
+#            placeholder="Example:\n• AI / Machine Learning Engineer\n• Remote or Hong Kong\n• Python, PyTorch, LLM experience"
+#        ).strip()
+    job_interest = ""
+    
     # Display the button regardless of uploaded file or job interest
     if st.button("Process CV and Find Matches"):
         if not uploaded_file:
@@ -336,15 +337,15 @@ def main():
             elapsed_time = time.time() - start_time  # Calculate elapsed time
             st.success(f"CV analysis completed in {elapsed_time:.2f} seconds.")
 
-        col1, col2 = st.columns([5, 5])
+#        col1, col2 = st.columns([5, 5])
 
-        with col1:
-            st.subheader("📊 Analysis")
-            st.markdown(cv_summary or "*No summary generated*")
+#        with col1:
+#            st.subheader("📊 Analysis")
+#            st.markdown(cv_summary or "*No summary generated*")
 
-        with col2:
-            st.subheader("💡 Suggestions to improve CV")
-            st.markdown(cv_suggestions or "*No suggestions generated*")
+#        with col2:
+        st.subheader("💡 Suggestions to improve CV")
+        st.markdown(cv_suggestions or "*No suggestions generated*")
 
         st.divider()
 
@@ -368,7 +369,8 @@ def main():
             st.stop()
 
         # ── Matching ─────────────────────────────────────
-        with st.spinner("Finding best job & mentor matches ... (this may take 30–90 seconds)"):
+#        with st.spinner("Finding best job & mentor matches ... (this may take 30–90 seconds)"):
+        with st.spinner("Finding best job matches ... (this may take 30–90 seconds)"):
             start_time = time.time()  # Start timer
             df_matched_jobs = match_jobs(cv_summary, job_interest, df_jobs)
             df_matched_profiles = match_profiles(cv_summary, job_interest, df_profiles)
@@ -376,37 +378,37 @@ def main():
             st.success(f"Matching completed in {elapsed_time:.2f} seconds.")
 
         # ── Results ──────────────────────────────────────
-        col_jobs, col_mentors = st.columns([5, 5])
+#        col_jobs, col_mentors = st.columns([5, 5])
 
-        with col_jobs:
-            st.subheader("🔍 Job Matches on LinkedIn")
+#        with col_jobs:
+        st.subheader("🔍 Job Matches on LinkedIn")
 
-            if df_matched_jobs.empty:
-                st.info("No job matches found.")
-            else:
-                for _, row in df_matched_jobs.iterrows():
-                    with st.expander(f"{row['title']} - Scores: {np.round(row['match_score'], 2)}%"):
-                        st.markdown(f"**Company:** {row.get('company','–')}")
-                        st.markdown(f"**Location:** {row.get('location','–')}")
-                        st.markdown(f"**Description:**\n{row.get('summary','–')}")
-                        st.markdown(f"**Why suitable?**\n{row.get('reason','–')}")
-                        st.link_button("🔗 View LinkedIn Job", row['link'], use_container_width=False)
+        if df_matched_jobs.empty:
+            st.info("No job matches found.")
+        else:
+            for _, row in df_matched_jobs.iterrows():
+                with st.expander(f"{row['title']} - Scores: {np.round(row['match_score'], 2)}%"):
+                    st.markdown(f"**Company:** {row.get('company','–')}")
+                    st.markdown(f"**Location:** {row.get('location','–')}")
+                    st.markdown(f"**Description:**\n{row.get('summary','–')}")
+                    st.markdown(f"**Why suitable?**\n{row.get('reason','–')}")
+                    st.link_button("🔗 View LinkedIn Job", row['link'], use_container_width=False)
 
-        with col_mentors:
-            st.subheader("👥 Career Path Mentors on LinkedIn")
-
-            if df_matched_profiles.empty:
-                st.info("No mentor matches found.")
-            else:
-                for i, row in df_matched_profiles.iterrows():
-                    with st.expander(f"{row['name']} - Scores: {np.round(row['match_score'], 2)}%"):
-                        st.markdown(f"**Location:** {row.get('city','–')}, {row.get('country','–')}")
-                        st.markdown(f"**Job:**\n{row.get('headline','–')}")
-                        st.markdown(f"**Summary:**\n{row.get('summary','–')}")
-                        st.markdown(f"**Why suggest this mentor?**: {row.get('reason','–')}")
-                        st.link_button("🔗 View LinkedIn Profile", f"https://www.linkedin.com/in/{row['id']}/", use_container_width=False)
-                        st.divider()
-                        st.markdown(f"**☕ Coffee Chat Invite**:\n\n{row.get('greeting','–')}")
+#        with col_mentors:
+#            st.subheader("👥 Career Path Mentors on LinkedIn")
+#
+#            if df_matched_profiles.empty:
+#                st.info("No mentor matches found.")
+#            else:
+#                for i, row in df_matched_profiles.iterrows():
+#                    with st.expander(f"{row['name']} - Scores: {np.round(row['match_score'], 2)}%"):
+#                        st.markdown(f"**Location:** {row.get('city','–')}, {row.get('country','–')}")
+#                        st.markdown(f"**Job:**\n{row.get('headline','–')}")
+#                        st.markdown(f"**Summary:**\n{row.get('summary','–')}")
+#                        st.markdown(f"**Why suggest this mentor?**: {row.get('reason','–')}")
+#                        st.link_button("🔗 View LinkedIn Profile", f"https://www.linkedin.com/in/{row['id']}/", use_container_width=False)
+#                        st.divider()
+#                        st.markdown(f"**☕ Coffee Chat Invite**:\n\n{row.get('greeting','–')}")
                         
 if __name__ == "__main__":
     main()
