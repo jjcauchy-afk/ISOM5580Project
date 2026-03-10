@@ -263,8 +263,8 @@ def match_profiles(cv_summary: str, job_interest: str, df_profiles: pd.DataFrame
 
         # Greeting
         prompt_greeting = (
-            f"Write a short, warm, professional first-message (max 5 sentences) "
-            f"to invite this mentor for a 15-min virtual coffee chat.\n"
+            f"Write a short, warm, professional first-message (max 30 words) to contact the mentor in LinkedIn "
+            f"to invite this mentor for a 15-min virtual coffee chat to seek for advises on my career development.\n\n"
             f"Mentor's name: {row['name']}\n"
             f"Mentor's job: {row['headline']}\n"
             f"Mentor's summary: {profile_summary}\n\n"
