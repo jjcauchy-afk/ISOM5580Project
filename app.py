@@ -287,8 +287,8 @@ def main():
     st.title("🌉 CareerBridge AI")
     st.header("Bridge the gap to your dream career")
     st.markdown(
-        "Upload your CV, tell me about your interests in searching jobs. "
-        "I will find **Jobs** and **Mentors** from LinkedIn for you."
+        "Upload your CV. "
+        "I will find **Jobs** from LinkedIn for you."
     )
     st.divider()
 
