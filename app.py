@@ -341,12 +341,12 @@ def main():
 #        col1, col2 = st.columns([5, 5])
 
 #        with col1:
-#            st.subheader("📊 Analysis")
-#            st.markdown(cv_summary or "*No summary generated*")
+        st.subheader("📊 Analysis")
+        st.markdown(cv_summary or "*No summary generated*")
 
 #        with col2:
-        st.subheader("💡 Suggestions to improve CV")
-        st.markdown(cv_suggestions or "*No suggestions generated*")
+#        st.subheader("💡 Suggestions to improve CV")
+#        st.markdown(cv_suggestions or "*No suggestions generated*")
 
         st.divider()
 
